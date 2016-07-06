@@ -1,0 +1,37 @@
+
+
+```{r}
+setwd("~/Dropbox/teachR/")
+library(knitr)
+opts_chunk$set(cache=FALSE)
+library(vegan)
+```
+
+Load Meta data (i.e. mapping file)
+```{r}
+meta_table <- read.csv("sub_meta.csv", row.names = 1, na.strings="#NULL!")
+
+otu_table <- read.csv("SPE_GBS0-12wk.csv",row.names = 1, col.names=NULL)
+
+#Transpose the data to have sample names on rows
+otu_table <- t(otu_table)
+
+#Convert to relative frequencies
+otu.rel <- otu_table/rowSums(otu_table)
+#Filter out any otu with below 1% abundance 
+otu.rel <- otu.rel[(rowSums(otu.rel) > 0.01),]
+
+#Extract the corresponding meta_table for the samples in otu_table
+meta_a <- meta_table[rownames(otu.rel),]
+
+# combine meta and otu tables
+final.a <- data.frame(meta_a, otu.rel)
+
+
+# subset data
+T1 <- final.a[, ]
+  
+final.a <- final.a[!(rownames(final.a) %in% c("GBS334","GBS346")),]
+final.a <- final.a[!(final.a$ipa_indication %in% c(4,5)),] 
+
+```

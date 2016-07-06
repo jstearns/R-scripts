@@ -1,0 +1,196 @@
+Handy tools
+========================================================
+Jennifer C. Stearns,
+`r as.character(format(Sys.Date(), format="%B %d, %Y"))`
+
+A collection of handy tricks in R
+Some are things that I figured out after a bit of heartache and some were adapted from the tutorial [R things I wish I'd been told](http://reganmian.net/blog/2014/10/14/starting-data-analysiswrangling-with-r-things-i-wish-id-been-told/)
+
+```{r}
+#Convert to relative frequencies
+abund_table<-abund_table/rowSums(abund_table)
+
+# when subseting df by the column id with a list of values in dd
+df[df$id %in% dd,]
+
+# when subsetting by multiple values in a column
+set <- final[(final$Nethnic_infant %in% c(2, 3)), ]
+# exclude multiple values in a column
+set <- final[!(final$Nethnic_infant %in% c(2, 3)), ]
+
+# changing the data format of multiple columns in a data frame at once
+cols = c(3:7,9:20)
+meta_table[,cols] = apply(meta_table[,cols], 2, factor)
+
+# get rid of scientific notation
+
+# subsetting by multiple conditions
+my.data.frame <- data[(data$V1 > 2) & (data$V2 < 4), ]
+```
+
+
+```{r}
+# from
+p <- plot_ordination(L5.data.r, L5.wUF, type="samples", color="Phenotype")
+p + geom_point(size = 7) + theme(axis.text=element_text(size=20), axis.title=element_text(size=20),plot.title=element_text(size=20), legend.text=element_text(size=15), legend.title=element_text(size=15)) + scale_color_manual(values=c("#a6611a","#80cdc1","#dfc27d","#018571"))
+
+# make this
+my_ordination <- function(data, ord, color, shape=NULL, title) {
+  (plot_ordination(
+    physeq=data, 
+    ordination=ord, 
+    type="samples", 
+    color=color, 
+    shape=shape, 
+    title=title) +
+  geom_point(size = 7) + 
+  theme(axis.text=element_text(size=20), 
+        axis.title=element_text(size=20),
+        plot.title=element_text(size=20),
+        legend.text=element_text(size=15),
+        legend.title=element_text(size=15))
+  )
+}
+
+my_ordination(qiimedata.r, wUF, "ipa_indication", "age", "PCoA of weighted UniFrac distances") # this works
+```
+
+Could make a function for preliminary figures and those for publication.
+
+Or cycle through the ordination methods
+```{r}
+ord_types <- c(wUF, uUF, bc, jac)
+color_vars <- c("ipa_indication", "age", "birth_mat_place")
+titles <- 
+for (groupv in group_vars) {
+  for (fillv in fill_vars) {
+    my_sideplot(db, groupv, fillv) # this cycles but doesn't plot
+  }
+}
+```
+
+Or cycle through the bacterial groups
+```{r}
+genera <- c("g__Escherichia","g__Bifidobacterium","g__Streptococcus","g__Bacteroides","f__Enterobacteriaceae","g__Ruminococcus") # or make this list automatically with for (e in names(sample_data(qiimedata.r)[g__Escherichia:g__Ruminococcus])) {do something} or whatever (not tested)
+for (gen in genera) {
+  my_ordination(data, ord, gen, "age", "PCoA of weighted UniFrac distances")
+}
+```
+
+Or cycle through the columns in a file (like the meta file!)
+```{r}
+# not tested... have to change names(db) to names(sample_data(qiimedata)) etc.
+for (e in names(db)) {
+  if (is.character(db[[e]])) { db[[e]] <- as.factor(db[[e]])}
+}
+```
+
+Other handy things
+```{r}
+rownames(x) <- NULL
+```
+
+Subsampling the otu table (rarefaction)
+```{r}
+abund_table <- read.csv("SPE_GBS0-12wk.csv",row.names=1,check.names=FALSE)
+#Transpose the data to have sample names on rows
+abund_table <- t(abund_table)
+#Filter out any samples taxas that have zero entries 
+abund_table <- subset(abund_table,rowSums(abund_table)!=0)
+
+depth <- abund_table[order(rowSums(abund_table),decreasing=F),]
+head(rowSums(depth))
+
+abund_table <- subset(abund_table,rowSums(abund_table)>11230)
+
+# ugh this is hard can't see how to get it to work
+row <- c(1:ncol(abund_table))
+N_samples <- 100
+for (i in row){
+  samples <- sample(1:ncol(abund_table), N_samples, rep=TRUE, prob=abund_table[i,])
+}
+
+samples <- sample(1:ncol(abund_table), N_samples, rep=TRUE, prob=abund_table[1,])
+
+# Count the number of each entry and store in a list.
+for (i in 1:ncol(abund_table)){
+    site_sample[[i]] <- sum(samples==i)
+}
+
+# OR try, from (http://ww2.coastal.edu/kingw/statistics/R-tutorials/resample.html)
+
+scores = sleep$extra                           # the data
+R = 999                                        # the number of replicates
+t.values = numeric(R)                          # storage for the results
+for (i in 1:R) {
+  group1 = sample(scores, size=10, replace=T)
+  group2 = sample(scores, size=10, replace=T)
+  t.values[i] = t.test(group1,group2)$statistic
+}
+
+```
+
+# plot data
+```{r}
+# interaction plot
+gp <- ggplot(data=final, aes(x=aage, y=S.rar, colour=factor(ipa))) + geom_point() + stat_smooth(method = "glm") + theme(axis.title.x = element_blank()) + theme(axis.title.y = element_blank()) + scale_color_manual(values = c("#a6611a","#41b6c4","#225ea8"))
+#pdf(file="/home/jstearns/Documents/Baby_mi/richness.pdf", height = 3, width = 5)
+print(gp)
+#dev.off()
+```
+[effects plot with confidence intervals](http://www.r-bloggers.com/plotting-regression-curves-with-confidence-intervals-for-lm-glm-and-glmm-in-r/) This page also has links to pages for checking residuals etc...
+
+
+# model diagnostics
+```{r}
+# residuals
+plot(tax.rirs,sqrt(abs(resid(.))), fitted(.))
+plot(ipa.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth"))
+
+plot(fitted(D.lm),residuals(D.lm),xlab="Fitted",ylab="Residuals")
+abline(h=0)
+lines(smooth.spline(fitted(lmm), residuals(lmm))) # this line should line up with the h=0 line
+
+# normality
+qqnorm(residuals(x))
+qqline(residuals(Srar.rirs))
+
+# testing model assumptions some simulated data
+x <- runif(100, 0, 10)
+y <- 1 + 2 * x + rnorm(100, 0, 1)
+m <- lm(y ~ x)
+par(mfrow = c(2, 2))
+plot(m)
+
+```
+
+multiple testing correction
+```{r}
+p <- scan(file = "pvals.txt", what = double()) # this file has a single column of p-values
+p.adj <- p.adjust(p, method = "fdr", n = length(p)) # see the documentation for methods
+write(p.adj, "adjusted_pvals.txt", sep = "\n")
+```
+
+Longitudinal GLM
+```{r}
+library(lme4)
+library(lmerTest)
+# set is data frame
+# actual age is the age column
+# PID is individual 
+gen.rirs <- lmer(set$k__Bacteria.p__Proteobacteria.c__Gammaproteobacteria.o__Enterobacteriales.f__Enterobacteriaceae.g__Escherichia ~ actual_age + (1 + actual_age | PID))
+#print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+
+library(allEffects)
+aeff <- allEffects(gen.rirs)
+#pdf("Bifido.pdf",height=5,width=10)
+plot(aeff)
+
+```
+
+```{r}
+install.packages("factoextra")
+library("factoextra")
+```
+

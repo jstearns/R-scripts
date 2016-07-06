@@ -1,0 +1,162 @@
+GBS 0-12 weeks: Taxa changes with age. Figure 1
+========================================================
+Jennifer C. Stearns,
+`r as.character(format(Sys.Date(), format="%B %d, %Y"))`
+
+```{r, warning=FALSE, message=FALSE}
+setwd("/home/jstearns/Documents/Baby_mi/")
+library(knitr)
+opts_chunk$set(cache=TRUE)
+library(ggplot2)
+library(grid)
+```
+
+```{r ,echo=FALSE}
+# Functions
+addKey <- function(table, cols) {
+  cbind(ID = interaction(table[cols]),
+        table)
+}
+```
+
+From this [R code for ecology tutorial](http://userweb.eng.gla.ac.uk/umer.ijaz/bioinformatics/ecological.html)
+```{r}
+# Import meta data
+meta_table <- read.csv("sub_meta.csv", row.names = 1, na.strings="#NULL!")
+
+cols = c(5:23)
+meta_table[,cols] = apply(meta_table[,cols], 2, factor)
+
+meta_table$age = factor(meta_table$age,levels(meta_table$age)[c(3,1,4,2)])
+#hist(meta_table$actual_age, breaks=50,xlim=c(0,110), plot=TRUE,col="grey")
+meta_table$ipa_duration <- as.numeric(meta_table$ipa_duration)
+```
+
+
+## Taxa bar charts
+### At the Genus level
+```{r, echo=FALSE}
+# modified the otu table by removing the "Consensus Lineage column" and creating a new OTU ID name for each OTU by concatenating the OTU ID, phyla, family, genus and species name into one with _ between them. Removed spaces and "p__" etc... values.
+
+L6 <-read.csv("SPE_L6_GBS.csv",row.names=1,check.names=FALSE)
+L6 <- subset(L6,rowSums(L6) > 0.001)
+
+#Transpose the data to have sample names on rows
+L6 <-t(L6)
+
+#meta_table<-read.csv("meta.csv", row.names = 1, na.strings="")
+#Just a check to ensure that the samples in meta_table are in the same order as in abund_table
+meta_g <- meta_table[rownames(L6),]
+final.g <- data.frame(meta_g, L6)
+
+# subset by indication
+noIPA.g <- final.g[(final.g$ipa_indication == 1),]
+CS.g <- final.g[(final.g$ipa_indication == 2),]
+GBS.g <- final.g[(final.g$ipa_indication == 3),]
+```
+
+
+```{r }
+colours <- c("#94FFB5","#D05D32","#B75DD5","#83D149","#85BDC5","#586F35","#593B6F","#D0B54A","#81D197","#6E3628","#C74B64","#878BCD","#434749","#C8579D","#F0A3FF","#0075DC","#993F00","#4C005C","#2BCE48","#FFCC99","#808080","#003380","#8F7C00","#9DCC00","#C20088","#190714")#,"#FFA405","#FFA8BB","#426600","#FF0010","#5EF1F2","#00998F","#740AFF","#990000","#FFFF00"
+
+#colours <- c("#642EFE","#689AED","#FE9A2E","#FED733","#1F6397","#A7C49C","#0C9439","#4BEAAE","#F7BE81","#7BA7D0","#7D723E","#AEC359","#676F50","#210B61","#3D728B","#455A65","#F4DDA3","#68AD01","#190714")
+```
+
+Bifido "#642EFE" #de2d26
+Escherichia "#689AED"
+Bacteriodes "#FE9A2E"
+Streptococcus "#FED733"
+Enterobacteriaceae "#1F6397",
+Ruminococcus "#A7C49C",
+Veillonella "#0C9439"
+Clostridium,"#4BEAAE",
+Parabacteriodes "#F7BE81",
+Enterococcus "#7BA7D0",
+Bacilli "#7D723E",
+Clostridiaceae "#AEC359",
+Lachnospiraceae "#676F50",
+Collinsella "#210B61", #fc9272
+Klebsiella "#3D728B",
+Haemophilus "#455A65",
+Lactobacillus "#F4DDA3",
+Megasphaera "#68AD01","#190714"
+Neisseria"#434749"
+Actinomyces "#593B6F" #fee0d2
+Epulospiscium "#BAEB27"
+Erysipelotrichaceae "#C3AA09"
+
+```{r, fig.height=7, fig.width=12}
+taxa.g <- function(taxa, N, file,w){
+  taxa$sample <- rownames(taxa)
+  taxa <- addKey(taxa, c(1,152))
+  row.names(taxa) <- taxa$ID
+  x <- taxa[,25:152]
+  x <- x[,order(colSums(x),decreasing=TRUE)]
+  #Get grouping information: can add multiple columns here if multiple facets are needed
+  grouping_info <- data.frame(row.names=rownames(taxa), as.factor(taxa[,3]))
+  #e.g. grouping_info <- data.frame(row.names=rownames(taxa), as.factor(taxa[,3]), as.factor(taxa[,5]))
+#--BEGIN OR--
+  #Extract list of top N Taxa
+  taxa_list <- colnames(x)[1:N]
+#Generate a new table with everything added to Others
+  new_x <- data.frame(x[,colnames(x) %in% taxa_list],Others=rowSums(x[,!colnames(x) %in% taxa_list]))
+#--OR--
+#Change any individual value < 1.0% to 0
+ #new_x <- x
+ #new_x[new_x<0.01] <- 0
+#Remove any taxa that now sum to 0
+ #new_x <- new_x[,colSums(new_x)>0]
+#Add an Others column
+ #new_x[,"other"] <- 1-rowSums(new_x)
+#--END OR--
+
+  df<-NULL
+  for (i in 1:dim(new_x)[2]){
+    tmp<-data.frame(row.names=NULL,Sample=rownames(new_x),Taxa=rep(colnames(new_x)[i],dim(new_x)[1]),Value=new_x[,i],Type=grouping_info[,1])
+    #tmp<-data.frame(row.names=NULL,Sample=rownames(new_x),Taxa=rep(colnames(new_x)[i],dim(new_x)[1]),Value=new_x[,i],Type=grouping_info[,1], Type2=grouping_info[,2]) if multiple facets are needed
+    if(i==1){df<-tmp} else {df<-rbind(df,tmp)}
+  }
+  
+  p<-ggplot(df,aes(Sample,Value,fill=Taxa))+geom_bar(stat="identity")+facet_grid(. ~ Type, drop=TRUE,scale="free",space="free_x")
+ #p<-ggplot(df,aes(Sample,Value,fill=Taxa))+geom_bar(stat="identity")+facet_grid(. ~ Type + Type2, drop=TRUE,scale="free",space="free_x") for multiple facets
+  p<-p+scale_fill_manual(values=colours[1:(N+1)])
+  p<-p+theme_bw()+ylab("Proportions")
+  p<-p+ scale_y_continuous(expand = c(0,0))+theme(strip.background = element_rect(fill="gray85"))+theme(panel.margin = unit(0.5, "lines"))# + theme(legend.position="none")
+  p<-p+theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))#+ggtitle(paste("Top",N,"genera over time",sep = " "))
+  pdf(file,height=6,width=w)
+  print(p)
+  dev.off() 
+}
+
+colours <- c("#de2d26","#689AED","#FE9A2E","#FED733","#1F6397","#A7C49C","#0C9439","#4BEAAE","#F7BE81","#7BA7D0","#7D723E","#AEC359","#676F50","#fc9272","#3D728B","#455A65","#F4DDA3","#68AD01","#190714")
+taxa.g(noIPA.g,18, "noIPA_taxa_2.pdf", 25)
+
+colours <- c("#1F6397","#de2d26","#689AED","#4BEAAE","#FED733","#676F50","#AEC359","#0C9439","#A7C49C","#7D723E","#7BA7D0","#F4DDA3","#434749","#3D728B","#fee0d2","#BAEB27","#455A65","#C3AA09","#190714")
+taxa.g(CS.g,18, "CS_taxa_2.pdf", 15)
+
+colours <- c("#689AED","#de2d26","#FE9A2E","#1F6397","#FED733","#F7BE81","#4BEAAE","#455A65","#AEC359","#0C9439","#A7C49C","#3D728B","#7BA7D0","#7D723E","#F4DDA3","#190714")
+taxa.g(GBS.g,15, "GBS_taxa_2.pdf", 21)
+```
+
+## Effect of IPA at the Phylum level
+```{r}
+## read in day3 L2 tables for ipa_indication since everyone with GBS was given Penicillin and everyone with a C-section was given Cefazolin
+ipa.none <- read.csv("ipa_indication_None.csv",sep="\t", row.names=1)
+ipa.csec <- read.csv("ipa_indication_Csec.csv",sep="\t", row.names=1)
+ipa.gbs <- read.csv("ipa_indication_GBS.csv",sep="\t", row.names=1)
+#par(mfrow=c(1,1), mar=c(5, 4, 4, 2) + 0.1)
+#boxplot(ipa.gbs, las=2, at =c(1,2,3,4,5,6, 8,9,10,11,12,13, 15,16,17,18,19,20, 22,23,24,25,26,27), par(mar= c(12, 4, 4, 2) + 0.1), main="Ipa indication = NONE, n=52")
+
+#, par(mar=c(1,4,1,4))
+# plotted together
+# plotted together
+pdf("phyla.pdf",height=5,width=6)
+par(mfrow=c(3,1), oma = c(0, 0, 4, 0) + 0.1)
+p <- boxplot(ipa.none, las=2, at =c(1,2,3,4,5,6, 8,9,10,11,12,13, 15,16,17,18,19,20, 22,23,24,25,26,27), xaxt="n", par(mar=c(1,4,1,4)), col=c("#D8D8D8","#d73027","#fc8d59","#fee090","#4575b4", "#D8D8D8"))
+p <- boxplot(ipa.gbs, las=2, at =c(1,2,3,4,5,6, 8,9,10,11,12,13, 15,16,17,18,19,20, 22,23,24,25,26,27) , xaxt="n", par(mar=c(1,4,1,4)), col=c("#D8D8D8","#d73027","#fc8d59","#fee090","#4575b4", "#D8D8D8"))
+p <- boxplot(ipa.csec, las = 2, at =c(1,2,3,4,5,6, 8,9,10,11,12,13, 15,16,17,18,19,20, 22,23,24,25,26,27), xaxt="n", par(mar=c(1,4,1,4)),col=c("#D8D8D8","#d73027","#fc8d59","#fee090","#4575b4", "#D8D8D8"))
+p<- legend('topleft', names(ipa.csec)[1:6], pch=15, col=c("#D8D8D8","#d73027","#fc8d59","#fee090","#4575b4", "#D8D8D8"), bty='n', cex=1)
+print(p)
+dev.off()
+```
+```

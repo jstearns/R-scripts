@@ -1,0 +1,480 @@
+GBS final stats analysis
+========================================================
+Jennifer C. Stearns,
+`r as.character(format(Sys.Date(), format="%B %d, %Y"))`
+
+```{r, warning=FALSE, message=FALSE}
+setwd("/home/jstearns/Documents/Baby_mi/")
+library(knitr)
+opts_chunk$set(cache=FALSE)
+library(vegan)
+library(ggplot2)
+library(lme4)
+library(grid)
+library(lmerTest)
+library(effects)
+library(reshape2)
+```
+
+Notes:
+* use BIC method to choose a model (not done)
+* for parity groups are: 0, 1 and 2 or more kids
+* for probiotics all types are glommed together as Y 
+
+From this [R code for ecology tutorial](http://userweb.eng.gla.ac.uk/umer.ijaz/bioinformatics/ecological.html)
+```{r}
+meta_table<-read.csv("sub_meta.csv", row.names = 1, na.strings="#NULL!")
+
+meta_table$age = factor(meta_table$age,levels(meta_table$age)[c(3,1,4,2)])
+meta_table$age <- factor(meta_table$age,ordered=TRUE)
+
+hist(meta_table$actual_age, breaks=50,xlim=c(0,110), plot=TRUE,col="grey", xlab="age in days")
+meta_table[,5:23] <- lapply(meta_table[,5:23] , factor)
+# rescale aage to weeks
+meta_table$actual_age <- meta_table$actual_age/7
+hist(meta_table$actual_age, breaks=15, plot=TRUE,col="grey", xlab = "age in weeks")
+meta_table$ipa_duration <- meta_table$ipa_duration/60
+hist(meta_table$ipa_duration, plot=TRUE,col="grey", xlab = "ipa duration in hours")
+```
+
+# Alpha diversity
+```{r}
+abund_table <-read.csv("SPE_GBS0-12wk.csv",row.names = 1, na.strings="#NULL!")
+#Transpose the data to have sample names on rows
+abund_table<-t(abund_table)
+abund_table <- subset(abund_table,rowSums(abund_table)>11220)
+
+#Extract the corresponding meta_table for the samples in abund_table
+meta_a<-meta_table[rownames(abund_table),]
+
+# combine meta and abund tables first
+final.a <- data.frame(meta_a, abund_table)
+final.a <- final.a[!(rownames(final.a) %in% c("GBS334","GBS346")),]
+final.a <- final.a[!(final.a$ipa_indication %in% c(4,5)),] 
+
+# Calculate species richness
+N <- rowSums(final.a[,24:ncol(final.a)])
+
+S <- specnumber(final.a[,24:ncol(final.a)])
+
+S.rar <-rarefy(final.a[,24:ncol(final.a)], min(N))
+# Calculate community diversity
+D <- diversity(final.a[,24:ncol(final.a)])
+```
+
+```{r}
+PID <- final.a$PID
+ipa <- factor(final.a$ipa_indication)
+aage <- final.a$actual_age
+parity <- final.a$parity
+Srar.rirs <- lmer(S.rar ~ aage * parity + (1 + aage | PID))
+print(summary(Srar.rirs))
+Srar.rirs <- lmer(S.rar ~ aage*ipa + (1 + aage | PID))
+#qqnorm(residuals(Srar.rirs))
+#qqline(residuals(Srar.rirs))
+plot(Srar.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")) # there are outliers here that I would like to exclude
+print(summary(Srar.rirs))
+aeff <- allEffects(Srar.rirs)
+plot(aeff)
+
+#gp <- ggplot(data=final.a, aes(x=aage, y=S.rar, colour=factor(ipa))) + geom_point() + stat_smooth(method = "glm") + theme(axis.title.x = element_blank()) + theme(axis.title.y = element_blank()) + scale_color_manual(values = c("#a6611a","#41b6c4","#225ea8"))
+#pdf(file="/home/jstearns/Documents/Baby_mi/richness.pdf", height = 3, width = 5)
+#print(gp)
+#dev.off()
+
+D.rirs <- lmer(D ~ aage * parity +(1 + aage | PID))
+#qqnorm(residuals(D.rirs))
+#qqline(residuals(D.rirs))
+plot(D.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth"))
+print(summary(D.rirs))
+D.rirs <- lmer(D ~ aage*ipa + aage * parity +(1 + aage | PID))
+print(summary(D.rirs))
+aeff <- allEffects(D.rirs)
+plot(aeff)
+    
+#gp <- ggplot(data=final.a, aes(x=aage, y=D, colour=factor(ipa))) + geom_point() + stat_smooth(method = "glm") + theme(axis.title.x = element_blank()) + theme(axis.title.y = element_blank()) + scale_color_manual(values = c("#a6611a","#41b6c4","#225ea8"))
+#pdf(file="/home/jstearns/Documents/Baby_mi/diversity.pdf", height = 3, width = 5)
+#print(gp)
+#dev.off()
+```
+
+
+```{r}
+# subset samples to compare
+# filter OTUs by abundance
+# compare abundances with KW otu at a time 
+# loop over each OTU
+# correct p-values for multiple testing with FDR adjustment
+wilcox.test()
+```
+
+# Beta diversity
+```{r}
+L6 <- read.csv("SPE_GBS_L6_nRoot.csv",row.names=1,check.names=FALSE)
+
+L6 <- subset(L6,rowSums(L6) > 0.01)
+L6 <- L6[order(rowSums(L6),decreasing = TRUE),]
+
+#Transpose the data to have sample names on rows
+L6 <-t(L6)
+
+meta.b <- meta_table[rownames(L6),]
+
+# combine meta
+final.b <- data.frame(meta.b, L6)
+```
+
+## Vaginal births only
+
+```{r}
+vag <- subset(final.b, birth_del_mode==1)
+vag <- vag[!(vag$ipa_indication %in% 4),]
+vag$birth_del_mode <- factor(vag$birth_del_mode)
+vag$ipa_indication <- factor(vag$ipa_indication)
+
+#stratify by age
+d3 <- subset(vag, age=="3d")
+d10 <- subset(vag, age=="10d")
+w6 <- subset(vag, age=="6w")
+w12 <- subset(vag, age=="12w")
+```
+
+### Multivariate model for permanova
+```{r}
+ad <- adonis(d3[,24:ncol(d3)] ~ d3$ipa_indication, data=d3[,1:23], method = "bray")
+ad
+
+d10.a <- d10[complete.cases(d10[,7]),]
+ad <- adonis(d10.a[,24:ncol(d10.a)] ~ d10.a$ipa_indication + d10.a$parity, data=d10.a[,1:23], method = "bray")
+ad
+
+w6.a <- w6[complete.cases(w6[,7]),]
+ad <- adonis(w6.a[,24:ncol(w6.a)] ~ w6.a$ipa_indication + w6.a$parity, data=w6.a[,1:23], method = "bray")
+ad
+
+w12.a <- w12[complete.cases(w12[,7]),]
+ad <- adonis(w12.a[,24:ncol(w12.a)] ~ w12.a$ipa_indication + w12.a$parity + w12$birth_del_place, data=w12.a[,1:23], method = "bray")
+ad
+```
+
+### IPA duration in GBS group alone
+```{r}
+GBS <- vag[(vag$ipa_indication %in% 3),]
+
+d3.gbs <- GBS[(GBS$age %in% "3d"),]
+d10.gbs <- GBS[(GBS$age %in% "10d"),]
+w6.gbs <- GBS[(GBS$age %in% "6w"),]
+w12.gbs <- GBS[(GBS$age %in% "12w"),]
+
+coefs <- function(ad, thresh){
+  df <- t(ad$coefficients)
+  #colnames(df) <- c("(Intercept)",var)
+  df <- df[order(abs(df[,2]),decreasing = TRUE),]
+  #write.csv(df, file = paste(age,var,"coeff.csv",sep = ""))
+  df <- df[abs(df[,2]) > thresh,]
+}
+```
+
+```{r}
+# after doing the univariate analysis added everything that was significant into a multivariate model
+ad <- adonis(d3.gbs[,24:ncol(d3.gbs)] ~ d3.gbs$ipa_duration, data=d3.gbs[,1:23], method = "bray")
+ad
+#d3.dur <- coefs(ad,0.005)
+#write.csv(d3.dur, "d3.dur.coef.csv")
+
+ad <- adonis(d10.gbs[,24:ncol(d10.gbs)] ~ d10.gbs$ipa_duration, data=d10.gbs[,1:23], method = "bray")
+ad
+#d10.dur <- coefs(ad,0.005)
+#write.csv(d10.dur, "d10.dur.coef.csv")
+
+ad <- adonis(w6.gbs[,24:ncol(w6.gbs)] ~ w6.gbs$ipa_duration + w6.gbs$probiotic_YN, data=w6.gbs[,1:23], method = "bray")
+ad
+#w6.dur <- coefs(ad,0.005)
+#write.csv(w6.dur, "w6.dur.coef.csv")
+
+ad <- adonis(w12.gbs[,24:ncol(w12.gbs)] ~ w12.gbs$ipa_duration + w12.gbs$birth_del_place, data=w12.gbs[,1:23], method = "bray")
+ad
+#w12.dur <- coefs(ad,0.005)
+#write.csv(w12.dur, "w12.dur.coef.csv")
+```
+at 12 weeks IPA duration accounts for 32% of the variability in the data
+
+## Csection vs vaginal births (noIPA)
+```{r}
+CSvVG <- final.b[!(final.b$ipa_indication %in% c(3,4,5)),]
+CSvVG$ipa_indication <- factor(CSvVG$ipa_indication)
+
+d3.csv <- CSvVG[(CSvVG$age %in% "3d"),]
+d10.csv <- CSvVG[(CSvVG$age %in% "10d"),]
+w6.csv <- CSvVG[(CSvVG$age %in% "6w"),]
+w12.csv <- CSvVG[(CSvVG$age %in% "12w"),]
+```
+
+### IPA duration in CS group alone
+```{r}
+CS <- final.b[(final.b$ipa_indication %in% 2),]
+CS$ipa_indication <- factor(CS$ipa_indication)
+
+d3.cs <- CS[(CS$age %in% "3d"),]
+d10.cs <- CS[(CS$age %in% "10d"),]
+w6.cs <- CS[(CS$age %in% "6w"),]
+w12.cs <- CS[(CS$age %in% "12w"),]
+
+coefs <- function(ad, thresh){
+  df <- t(ad$coefficients)
+  #colnames(df) <- c("(Intercept)",var)
+  df <- df[order(abs(df[,2]),decreasing = TRUE),]
+  #write.csv(df, file = paste(age,var,"coeff.csv",sep = ""))
+  df <- df[abs(df[,2]) > thresh,]
+}
+
+d3.cs.a <- d3.cs[complete.cases(d3.cs[,4]),]
+ad <- adonis(d3.cs.a[,24:ncol(d3.cs.a)] ~ d3.cs.a$ipa_duration, data=d3.cs.a[,1:23], method = "bray")
+ad
+#d3.dur <- coefs(ad,0.00008)
+#write.csv(d3.dur, "d3.dur.coef.csv")
+
+d10.cs <- d10.cs[complete.cases(d10.cs[,4]),]
+ad <- adonis(d10.cs[,24:ncol(d10.cs)] ~ d10.cs$ipa_duration, data=d10.cs[,1:23], method = "bray")
+ad
+d10.dur <- coefs(ad,0.00008)
+#write.csv(d10.dur, "d10cs.dur.coef.csv")
+hist(d10.cs$ipa_duration, col = "grey")
+
+w6.cs <- w6.cs[complete.cases(w6.cs[,4]),]
+ad <- adonis(w6.cs[,24:ncol(w6.cs)] ~ w6.cs$ipa_duration, data=w6.cs[,1:23], method = "bray")
+ad
+#w6.dur <- coefs(ad,0.00008)
+#write.csv(w6.dur, "w6.dur.coef.csv")
+w12.cs <- w12.cs[complete.cases(w12.cs[,4]),]
+ad <- adonis(w12.cs[,24:ncol(w12.cs)] ~ w12.cs$ipa_duration, data=w12.cs[,1:23], method = "bray")
+ad
+#w12.dur <- coefs(ad,0.00008)
+#write.csv(w12.dur, "w12.dur.coef.csv")
+```
+There is a significant effect of ipa duration at day 10 but I'm leary because of the small sample size (n=6).
+
+### Multivariate model for permanova - CS v Vag
+```{r}
+ad <- adonis(d3.csv[,24:ncol(d3.csv)] ~ d3.csv$birth_del_mode, data=d3.csv[,1:23], method = "bray")
+ad
+
+d10.csv.a <- d10.csv[complete.cases(d10.csv[,c(6,7,15)]),]
+ad <- adonis(d10.csv.a[,24:ncol(d10.csv.a)] ~ d10.csv.a$birth_del_mode + d10.csv.a$parity + d10.csv.a$probiotic_YN + d10.csv.a$d10_diet_now, data=d10.csv.a[,1:23], method = "bray")
+ad
+
+w6.csv.a <- w6.csv[complete.cases(w6.csv[,7]),]
+ad <- adonis(w6.csv.a[,24:ncol(w6.csv.a)] ~ w6.csv.a$birth_del_mode + w6.csv.a$parity, data=w6.csv.a[,1:23], method = "bray")
+ad
+
+w12.csv.a <- w12.csv[complete.cases(w12.csv[,7]),]
+ad <- adonis(w12.csv.a[,24:ncol(w12.csv.a)] ~ w12.csv.a$birth_del_mode + w12.csv.a$parity, data=w12.a[,1:23], method = "bray")
+ad
+```
+At day 3 birth mode is associated with a difference in the microbiome
+At day 10 birth mode is associated with a difference in the microbiome when you account for parity, probiotic use and diet
+At week 6 birth mode is no longer associated with a difference in the microbiome but parity is (when birth mode is considered).
+At week 12 birth mode is associated with a differencein the mirobiome when parity is taken into account.
+
+
+
+## Multiple testing correction
+```{r}
+p <- scan(file = "perm_pvals.txt", what = double()) # this file has a single column of p-values
+p.adj <- p.adjust(p, method = "fdr", n = length(p)) # see the documentation for methods
+#write(p.adj, "adjusted_pvals.txt", sep = "\n")
+pdf <- data.frame(p, p.adjust(p, method = "fdr", n = length(p)))
+write.table(pdf,"adjusted_pvals.txt",sep = "\t", row.names = FALSE)
+```
+
+
+# Taxa differences 
+```{r}
+ipas <- final.b[!(final.b$ipa_indication %in% c(4,5)),]
+colnames(ipas[,24:37])
+PID <- ipas$PID
+actual_age <- ipas$actual_age
+ipa <- factor(ipas$ipa_indication)
+parity <- factor(ipas$parity)
+```
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Actinobacteria.c__Actinobacteria.o__Bifidobacteriales.f__Bifidobacteriaceae.g__Bifidobacterium ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+pdf("Bifido.pdf",height=5,width=10)
+plot(aeff)
+dev.off()
+
+```
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Proteobacteria.c__Gammaproteobacteria.o__Enterobacteriales.f__Enterobacteriaceae.g__Escherichia ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+pdf("Escherichia.pdf",height=5,width=10)
+plot(aeff)
+dev.off()
+```
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Bacteroidetes.c__Bacteroidia.o__Bacteroidales.f__Bacteroidaceae.g__Bacteroides ~ ipa + actual_age + (1 + actual_age | PID))
+
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+pdf("Bacteroides.pdf",height=5,width=10)
+plot(aeff)
+dev.off()
+```
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Firmicutes.c__Bacilli.o__Lactobacillales.f__Streptococcaceae.g__Streptococcus ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+pdf("Streptococcus.pdf",height=5,width=10)
+plot(aeff)
+dev.off()
+```
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Proteobacteria.c__Gammaproteobacteria.o__Enterobacteriales.f__Enterobacteriaceae.Other ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+pdf("Enterobacteriaceae.other.pdf",height=5,width=10)
+plot(aeff)
+dev.off()
+```
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Firmicutes.c__Clostridia.o__Clostridiales.f__Lachnospiraceae.g__.Ruminococcus. ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+pdf("Lachn.Rumino.pdf",height=5,width=10)
+plot(aeff)
+dev.off()
+```
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Firmicutes.c__Clostridia.o__Clostridiales.f__Clostridiaceae.g__Clostridium ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+pdf("Clostridium.pdf",height=5,width=10)
+plot(aeff)
+dev.off()
+```
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Bacteroidetes.c__Bacteroidia.o__Bacteroidales.f__Porphyromonadaceae.g__Parabacteroides ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+pdf("Parabacteroides.pdf",height=5,width=10)
+plot(aeff)
+dev.off()
+```
+
+Veillonella (see below)
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Firmicutes.c__Clostridia.o__Clostridiales.f__Clostridiaceae.Other ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+pdf("Clostridiacea.other.pdf",height=5,width=10)
+plot(aeff)
+dev.off()
+```
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Firmicutes.c__Bacilli.o__Lactobacillales.f__Enterococcaceae.g__Enterococcus ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+pdf("Enterococcus.pdf",height=5,width=10)
+plot(aeff)
+dev.off()
+```
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Firmicutes.c__Clostridia.o__Clostridiales.f__Lachnospiraceae.Other ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+pdf("Lachno.pdf",height=5,width=10)
+plot(aeff)
+dev.off()
+```
+
+```{r}
+# This is Staphylococcus
+gen.rirs <- lmer(ipas$k__Bacteria.p__Firmicutes.c__Bacilli.Other.Other.Other ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+pdf("Staphylococcus.pdf",height=5,width=10)
+plot(aeff)
+dev.off()
+```
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Proteobacteria.c__Gammaproteobacteria.o__Pasteurellales.f__Pasteurellaceae.g__Haemophilus ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+```
+
+
+Based on the Finley paper about the four missing organisms in kids who develop asthma
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Actinobacteria.c__Actinobacteria.o__Actinomycetales.f__Micrococcaceae.g__Rothia ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+```
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Firmicutes.c__Clostridia.o__Clostridiales.f__Ruminococcaceae.g__Faecalibacterium ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+```
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Firmicutes.c__Clostridia.o__Clostridiales.f__Lachnospiraceae.g__Lachnospira ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+```
+
+```{r}
+gen.rirs <- lmer(ipas$k__Bacteria.p__Firmicutes.c__Clostridia.o__Clostridiales.f__Veillonellaceae.g__Veillonella ~ ipa*actual_age + (1 + actual_age | PID))
+print(plot(gen.rirs,sqrt(abs(resid(.)))~fitted(.),type=c("p","smooth")))
+print(summary(gen.rirs))
+aeff <- allEffects(gen.rirs)
+plot(aeff)
+pdf("Veillonella.pdf",height=5,width=10)
+plot(aeff)
+dev.off()
+```

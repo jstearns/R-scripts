@@ -1,0 +1,59 @@
+---
+title: "NMDS"
+author: "Daphnée Lamarche"
+date: "27 avril 2016"
+output: html_document
+---
+### Make ordination via phyloseq
+```{r}
+
+set.seed(1234)
+
+nmdsk4.ord <- ordinate(data, method = "NMDS", distance = "bray", k=4)
+
+```
+###Make ordination via vegan using dm (not able to figure out how to use raw data ... directly.. read someplace that it needs to be in log transformed ??)
+```{r}
+BC_Dm <- phyloseq::distance(data, method = "bray")
+BC_DM = distance(rel_data, method="bray")
+
+## Default is k=2
+BC2.nmds<-metaMDS(BC_DM, k=2)
+BC3.nmds<-metaMDS(BC_DM, k=3)
+BC4.nmds<-metaMDS(BC_DM, k=4)
+BC5.nmds<-metaMDS(BC_DM, k=5)
+
+```
+### uses different k values to determine how many dimensions you will need to have an optimal stress value (under 0.2 and fist point where the diffence is huge)
+```{r}
+BC2.nmds
+# stress = 0.2214219
+BC3.nmds
+# stress =  0.1595712 
+BC4.nmds
+# stress = 0.1267351
+BC5.nmds
+# stress = 0.1046352
+# I will use BC3.nmds (k=3)
+```
+### Make stressplot, make sure your points are scatter close to the line, and that your point fit the linear line (model??)
+```{r}
+stressplot(BC3.nmds)
+```
+## Now look at the 3rd axis to be sure you're not missing anything
+```{r}
+
+p <- plot_ordination(rel_data, BC3.nmds, type = "samples", color = "Type", axes = c(1,3),title = "Bray-Curtis Baseline and healthy")
+
+p + geom_point(size = 3.5) + theme(legend.title = element_text(size=20)) + theme(legend.text = element_text(size=18)) + plot(vec.sp, p.max=0.01, col='blue')
+
+```
+### Get the points (cooordinate value)
+
+```{r}
+BC3.nmds$point
+
+write.table(BC3.nmds$point, "BC3.nmds.csv", sep = ",")
+
+```
+

@@ -1,0 +1,37 @@
+PCoAs
+========================================================
+Jennifer C. Stearns,
+`r as.character(format(Sys.Date(), format="%B %d, %Y"))`
+
+```{r}
+library("phyloseq")
+
+otu_table <- "otu_table.txt"
+map_file <- "map.csv"
+qiimedata <- import_qiime(otu_table, map_file)
+
+HFD <- 
+```
+
+
+```{r}
+# make this
+my_ordination <- function(data, ord, color, shape=NULL, title) {
+  (plot_ordination(
+    physeq=data, 
+    ordination=ord, 
+    type="samples", 
+    color=color, 
+    shape=shape, 
+    title=title) +
+  geom_point(size = 7) + 
+  theme(axis.text=element_text(size=20), 
+        axis.title=element_text(size=20),
+        plot.title=element_text(size=20),
+        legend.text=element_text(size=15),
+        legend.title=element_text(size=15))
+  )
+}
+
+my_ordination(qiimedata.r, wUF, "ipa_indication", "age", "PCoA of weighted UniFrac distances") # this works
+```
